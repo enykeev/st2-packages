@@ -43,6 +43,7 @@ dependencies:
     - sudo .circle/configure-services.sh
     - sudo .circle/fix-cache-permissions.sh
     - sudo pip install wheel docker-compose
+    - gem install package_cloud
     - docker-compose version
     - docker version
   override:
@@ -66,14 +67,26 @@ test:
 deployment:
   publish:
     branch: master
-    owner: StackStorm
     commands:
       # Deploy to Bintray all artifacts for respective distros in parallel
       - |
         DISTROS=($DISTROS)
         for i in $(seq 0 $((CIRCLE_NODE_TOTAL-1))); do
-          echo Deploying Bintray artifacts for "${DISTROS[$i]}" ...
-          .circle/bintray.sh deploy ${DISTROS[$i]}_staging ~/packages/${DISTROS[$i]} &
+          echo Deploying PackageCloud artifacts for "${DISTROS[$i]}" ...
+          case "${DISTROS[$i]}" in
+          "wheezy" | "jessie")
+              package_cloud push enykeev/stackstorm_unstable/debian/${DISTROS[$i]} ~/packages/${DISTROS[$i]}
+              ;;
+          "el6" | "el7")
+              package_cloud push enykeev/stackstorm_unstable/el/${DISTROS[$i]//[^0-9]/} ~/packages/${DISTROS[$i]}
+              ;;
+          "trusty")
+              package_cloud push enykeev/stackstorm_unstable/ubuntu/${DISTROS[$i]} ~/packages/${DISTROS[$i]}
+              ;;
+          *)
+              echo "Unknown distro. Skipping..."
+              ;;
+          esac
         done
         wait
       - .circle/docker.sh deploy st2actionrunner st2api st2auth st2exporter st2notifier st2resultstracker st2rulesengine st2sensorcontainer st2garbagecollector
